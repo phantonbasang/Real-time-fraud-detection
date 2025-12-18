@@ -1,135 +1,395 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Fraud Detection Dashboard</title>
+    <title>Real-time Fraud Detection Dashboard</title>
     <link rel="stylesheet" href="/static/style.css">
-    {% if view == "chart" %}
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    {% if tab == 'table' and page == 1 and fraud_only == 'false' %}
+    <meta http-equiv="refresh" content="15">
     {% endif %}
 </head>
 <body>
 
-<h1>Fraud Detection Dashboard</h1>
-
-<div class="view-switch">
-    <a href="/?view=table"><button class="btn">Table View</button></a>
-    <a href="/?view=chart"><button class="btn">Chart View</button></a>
+<div class="header">
+    <h1>🚨 Real-time Fraud Detection Dashboard</h1>
+    <div class="last-update">Last updated: <span id="updateTime"></span></div>
 </div>
 
-<div class="stats">
-    <div class="box">
-        Total Transactions
-        <b>{{ total }}</b>
+<!-- Tab Navigation -->
+<div class="tab-navigation">
+    <a href="?tab=table&page=1&per_page={{ per_page }}&fraud_only={{ fraud_only }}" 
+       class="tab-btn {% if tab == 'table' %}active{% endif %}">
+        📋 Table View
+    </a>
+    <a href="?tab=chart" 
+       class="tab-btn {% if tab == 'chart' %}active{% endif %}">
+        📊 Charts
+    </a>
+    <a href="?tab=stats" 
+       class="tab-btn {% if tab == 'stats' %}active{% endif %}">
+        📈 Statistics
+    </a>
+</div>
+
+<!-- TABLE TAB -->
+{% if tab == 'table' %}
+<div class="tab-content">
+    <!-- Filter Controls -->
+    <div class="filter-controls">
+        <a href="?tab=table&page=1&per_page={{ per_page }}&fraud_only=false" 
+           class="filter-btn {% if fraud_only == 'false' %}active{% endif %}">
+            🔍 All Transactions
+        </a>
+        <a href="?tab=table&page=1&per_page={{ per_page }}&fraud_only=true" 
+           class="filter-btn fraud {% if fraud_only == 'true' %}active{% endif %}">
+            ⚠️ Fraud Only ({{ "{:,}".format(fraud) }})
+        </a>
     </div>
 
-    <div class="box fraud">
-        Fraud Transactions
-        <b>{{ fraud }}</b>
-    </div>
-
-    <div class="box">
-        Fraud Rate
-        <b>{{ fraud_rate }}%</b>
+    <!-- Transactions Table -->
+    <div class="table-section">
+        <div class="table-header">
+            <h3>📋 {% if fraud_only == 'true' %}Fraud{% else %}All{% endif %} Transactions</h3>
+            <div class="pagination-info">
+                Showing {{ showing_start }} - {{ showing_end }} of {{ "{:,}".format(filtered_total) }} transactions
+            </div>
+        </div>
+        
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Transaction ID</th>
+                        <th>Client ID</th>
+                        <th>Card ID</th>
+                        <th>Amount</th>
+                        <th>Fraud Score</th>
+                        <th>Prediction</th>
+                        <th>Time</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for txn in recent_transactions %}
+                    <tr class="{% if txn[4] == 1 %}fraud-row{% endif %}">
+                        <td><code>{{ txn[0] }}</code></td>
+                        <td>{{ txn[1] }}</td>
+                        <td>{{ txn[2] }}</td>
+                        <td class="amount">${{ "{:,.2f}".format(txn[3]) }}</td>
+                        <td>
+                            <div class="score-bar-container">
+                                <div class="score-bar" style="width: {{ (txn[5] * 100) if txn[5] else 0 }}%; 
+                                    background-color: {% if txn[5] and txn[5] >= 0.9 %}#dc3545{% elif txn[5] and txn[5] >= 0.8 %}#ff9800{% else %}#4caf50{% endif %};">
+                                </div>
+                                <span class="score-text">{{ "%.1f"|format((txn[5] * 100) if txn[5] else 0) }}%</span>
+                            </div>
+                        </td>
+                        <td>
+                            {% if txn[4] == 1 %}
+                                <span class="badge badge-fraud">FRAUD</span>
+                            {% else %}
+                                <span class="badge badge-legitimate">LEGITIMATE</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ txn[6].strftime('%Y-%m-%d %H:%M:%S') if txn[6] else 'N/A' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Pagination Controls -->
+        <div class="pagination">
+            <!-- First Page -->
+            {% if page > 1 %}
+                <a href="?tab=table&page=1&per_page={{ per_page }}&fraud_only={{ fraud_only }}" class="page-btn">
+                    «« First
+                </a>
+            {% endif %}
+            
+            <!-- Previous Page -->
+            {% if page > 1 %}
+                <a href="?tab=table&page={{ page - 1 }}&per_page={{ per_page }}&fraud_only={{ fraud_only }}" class="page-btn">
+                    ‹ Previous
+                </a>
+            {% endif %}
+            
+            <!-- Page Numbers -->
+            {% if start_page > 1 %}
+                <span class="page-ellipsis">...</span>
+            {% endif %}
+            
+            {% for p in range(start_page, end_page + 1) %}
+                <a href="?tab=table&page={{ p }}&per_page={{ per_page }}&fraud_only={{ fraud_only }}" 
+                   class="page-btn {% if p == page %}active{% endif %}">
+                    {{ p }}
+                </a>
+            {% endfor %}
+            
+            {% if end_page < total_pages %}
+                <span class="page-ellipsis">...</span>
+            {% endif %}
+            
+            <!-- Next Page -->
+            {% if page < total_pages %}
+                <a href="?tab=table&page={{ page + 1 }}&per_page={{ per_page }}&fraud_only={{ fraud_only }}" class="page-btn">
+                    Next ›
+                </a>
+            {% endif %}
+            
+            <!-- Last Page -->
+            {% if page < total_pages %}
+                <a href="?tab=table&page={{ total_pages }}&per_page={{ per_page }}&fraud_only={{ fraud_only }}" class="page-btn">
+                    Last »»
+                </a>
+            {% endif %}
+        </div>
+        
+        <!-- Per Page Selector -->
+        <div class="per-page-selector">
+            <span>Items per page:</span>
+            <a href="?tab=table&page=1&per_page=10&fraud_only={{ fraud_only }}" class="per-page-btn {% if per_page == 10 %}active{% endif %}">10</a>
+            <a href="?tab=table&page=1&per_page=20&fraud_only={{ fraud_only }}" class="per-page-btn {% if per_page == 20 %}active{% endif %}">20</a>
+            <a href="?tab=table&page=1&per_page=50&fraud_only={{ fraud_only }}" class="per-page-btn {% if per_page == 50 %}active{% endif %}">50</a>
+            <a href="?tab=table&page=1&per_page=100&fraud_only={{ fraud_only }}" class="per-page-btn {% if per_page == 100 %}active{% endif %}">100</a>
+        </div>
     </div>
 </div>
 
-{% if view == "chart" %}
+<!-- CHART TAB -->
+{% elif tab == 'chart' %}
+<div class="tab-content">
+    <!-- Charts Section -->
+    <div class="charts-section-full">
+        <div class="chart-container-large">
+            <h3>📊 Transaction Distribution</h3>
+            <canvas id="pieChart"></canvas>
+        </div>
 
-<div class="charts">
-    <div class="chart-box">
-        <h3>Fraud vs Not Fraud (Count)</h3>
-        <canvas id="barChart"></canvas>
-    </div>
-
-    <div class="chart-box">
-        <h3>Fraud Distribution</h3>
-        <canvas id="pieChart"></canvas>
+        <div class="chart-container-large">
+            <h3>📈 Hourly Trend</h3>
+            <canvas id="trendChart"></canvas>
+        </div>
+        
+        <div class="chart-container-large">
+            <h3>📊 Fraud vs Legitimate</h3>
+            <canvas id="barChart"></canvas>
+        </div>
     </div>
 </div>
+
+<!-- STATS TAB -->
+{% elif tab == 'stats' %}
+<div class="tab-content">
+    <!-- Key Metrics Cards -->
+    <div class="metrics-grid">
+    <div class="metric-card">
+        <div class="metric-icon">📊</div>
+        <div class="metric-content">
+            <div class="metric-label">Total Transactions</div>
+            <div class="metric-value">{{ "{:,}".format(total) }}</div>
+        </div>
+    </div>
+
+    <div class="metric-card fraud">
+        <div class="metric-icon">⚠️</div>
+        <div class="metric-content">
+            <div class="metric-label">Fraud Detected</div>
+            <div class="metric-value">{{ "{:,}".format(fraud) }}</div>
+            <div class="metric-subtext">{{ fraud_rate }}% fraud rate</div>
+        </div>
+    </div>
+
+    <div class="metric-card success">
+        <div class="metric-icon">✅</div>
+        <div class="metric-content">
+            <div class="metric-label">Legitimate</div>
+            <div class="metric-value">{{ "{:,}".format(legitimate) }}</div>
+        </div>
+    </div>
+
+    <div class="metric-card warning">
+        <div class="metric-icon">🚨</div>
+        <div class="metric-content">
+            <div class="metric-label">High Risk (≥90%)</div>
+            <div class="metric-value">{{ "{:,}".format(high_risk) }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Financial Metrics -->
+<div class="financial-metrics">
+    <div class="financial-card">
+        <div class="financial-label">💰 Total Fraud Amount</div>
+        <div class="financial-value">${{ "{:,.2f}".format(fraud_amount) }}</div>
+    </div>
+
+    <div class="financial-card">
+        <div class="financial-label">📈 Avg Fraud Amount</div>
+        <div class="financial-value">${{ "{:,.2f}".format(avg_fraud_amount) }}</div>
+    </div>
+
+    <div class="financial-card">
+        <div class="financial-label">🕐 Fraud (24h)</div>
+        <div class="financial-value">{{ "{:,}".format(fraud_24h) }}</div>
+    </div>
+</div>
+
+    <!-- Recent Fraud Alerts -->
+    <div class="alerts-section">
+    <h3>🚨 Recent Fraud Alerts</h3>
+    <div class="alerts-grid">
+        {% for fraud in recent_frauds %}
+        <div class="alert-card">
+            <div class="alert-header">
+                <span class="alert-badge">FRAUD</span>
+                <span class="alert-score">{{ "%.1f"|format(fraud[3] * 100) }}%</span>
+            </div>
+            <div class="alert-body">
+                <div class="alert-row">
+                    <span class="alert-label">Transaction:</span>
+                    <span class="alert-value">{{ fraud[0] }}</span>
+                </div>
+                <div class="alert-row">
+                    <span class="alert-label">Client:</span>
+                    <span class="alert-value">{{ fraud[1] }}</span>
+                </div>
+                <div class="alert-row">
+                    <span class="alert-label">Amount:</span>
+                    <span class="alert-value amount">${{ "{:,.2f}".format(fraud[2]) }}</span>
+                </div>
+                <div class="alert-row">
+                    <span class="alert-label">Time:</span>
+                    <span class="alert-value">{{ fraud[4].strftime('%Y-%m-%d %H:%M:%S') if fraud[4] else 'N/A' }}</span>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+</div>
+{% endif %}
 
 <script>
-const labels = {{ labels | tojson }};
-const values = {{ values | tojson }};
+// Update time
+document.getElementById('updateTime').textContent = new Date().toLocaleString();
 
-const colors = [
-    "#4CAF50",
-    "#F44336"
-];
-
-new Chart(document.getElementById("barChart"), {
-    type: "bar",
+{% if tab == 'chart' or tab == 'stats' %}
+// Pie Chart - Transaction Distribution
+if (document.getElementById("pieChart")) {
+new Chart(document.getElementById("pieChart"), {
+    type: "doughnut",
     data: {
-        labels: labels,
+        labels: {{ pred_labels | tojson }},
         datasets: [{
-            label: "Number of Transactions",
-            data: values,
-            backgroundColor: colors
+            data: {{ pred_values | tojson }},
+            backgroundColor: ["#4CAF50", "#F44336"],
+            borderWidth: 2,
+            borderColor: "#fff"
         }]
     },
     options: {
         responsive: true,
+        maintainAspectRatio: true,
         plugins: {
             legend: {
-                display: false
+                position: 'bottom',
+                labels: {
+                    font: { size: 14 },
+                    padding: 20
+                }
             }
         }
     }
 });
+}
 
-new Chart(document.getElementById("pieChart"), {
-    type: "pie",
+// Trend Chart - Hourly
+if (document.getElementById("trendChart")) {
+new Chart(document.getElementById("trendChart"), {
+    type: "line",
     data: {
-        labels: labels,
+        labels: {{ trend_hours | tojson }},
+        datasets: [
+            {
+                label: "Total Transactions",
+                data: {{ trend_totals | tojson }},
+                borderColor: "#2196F3",
+                backgroundColor: "rgba(33, 150, 243, 0.1)",
+                borderWidth: 2,
+                fill: true,
+                tension: 0.4
+            },
+            {
+                label: "Fraud Detected",
+                data: {{ trend_frauds | tojson }},
+                borderColor: "#F44336",
+                backgroundColor: "rgba(244, 67, 54, 0.1)",
+                borderWidth: 2,
+                fill: true,
+                tension: 0.4
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: {
+            legend: {
+                position: 'top',
+                labels: {
+                    font: { size: 12 },
+                    usePointStyle: true
+                }
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    precision: 0
+                }
+            }
+        }
+    }
+});
+}
+
+{% if tab == 'chart' %}
+// Bar Chart - Fraud vs Legitimate
+if (document.getElementById("barChart")) {
+new Chart(document.getElementById("barChart"), {
+    type: "bar",
+    data: {
+        labels: {{ pred_labels | tojson }},
         datasets: [{
-            label: "Transaction Distribution",
-            data: values,
-            backgroundColor: colors
+            label: "Number of Transactions",
+            data: {{ pred_values | tojson }},
+            backgroundColor: ["#4CAF50", "#F44336"],
+            borderWidth: 2,
+            borderRadius: 8
         }]
     },
     options: {
-        responsive: true
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: {
+            legend: {
+                display: false
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    precision: 0
+                }
+            }
+        }
     }
 });
-</script>
-
-{% else %}
-
-<h2>Latest Transactions</h2>
-
-<table>
-    <tr>
-        <th>Transaction ID</th>
-        <th>Client</th>
-        <th>Card</th>
-        <th>Amount</th>
-        <th>Prediction</th>
-        <th>Time</th>
-    </tr>
-
-    {% for r in rows %}
-    <tr class="{% if r[4] == 1 %}fraud-row{% endif %}">
-        <td>{{ r[0] }}</td>
-        <td>{{ r[1] }}</td>
-        <td>{{ r[2] }}</td>
-        <td>{{ r[3] }}</td>
-        <td>
-            {% if r[4] == 1 %}
-                Fraud
-            {% else %}
-                Not Fraud
-            {% endif %}
-        </td>
-        <td>{{ r[5] }}</td>
-    </tr>
-    {% endfor %}
-</table>
-
+}
 {% endif %}
-
-<script>
-setTimeout(() => {
-    window.location.reload();
-}, 5000);
+{% endif %}
 </script>
 
 </body>
